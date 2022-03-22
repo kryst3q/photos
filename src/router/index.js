@@ -135,5 +135,14 @@ export default new Router({
 				onThisDay: true,
 			}),
 		},
+		{
+			path: '/search/:query',
+			name: 'search',
+			component: Timeline,
+			props: route => ({
+				rootTitle: t('photos', 'Search'),
+				search: route.params.query,
+			}),
+		},
 	],
 })

@@ -57,6 +57,8 @@
 <script>
 import moment from '@nextcloud/moment'
 import { mapGetters } from 'vuex'
+import flatten from 'lodash/flatten'
+import uniq from 'lodash/uniq'
 
 import getPhotos from '../services/PhotoSearch'
 
@@ -70,6 +72,7 @@ import Loader from '../components/Loader'
 import cancelableRequest from '../utils/CancelableRequest'
 import GridConfigMixin from '../mixins/GridConfig'
 import { allMimes } from '../services/AllowedMimes'
+import getTaggedImages from '../services/TaggedImages'
 
 export default {
 	name: 'Timeline',
@@ -104,6 +107,10 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+		search: {
+			type: String,
+			default: '',
+		},
 	},
 
 	data() {
@@ -113,6 +120,7 @@ export default {
 			error: null,
 			page: 0,
 			loaderComponent: Loader,
+			searchFileList: [],
 		}
 	},
 
@@ -121,6 +129,7 @@ export default {
 		...mapGetters([
 			'files',
 			'timeline',
+			'tags',
 		]),
 		// list of loaded medias
 		fileList() {
@@ -195,6 +204,13 @@ export default {
 			this.resetState()
 			this.getContent()
 		},
+		search() {
+			this.loadSearchResults()
+		},
+	},
+
+	mounted() {
+		this.loadSearchResults()
 	},
 
 	beforeRouteLeave(from, to, next) {
@@ -248,6 +264,7 @@ export default {
 					perPage: numberOfImagesPerBatch,
 					mimesType: this.mimesType,
 					onThisDay: this.onThisDay,
+					fileIds: this.searchFileList,
 				})
 
 				// If we get less files than requested that means we got to the end
@@ -304,6 +321,71 @@ export default {
 
 		getFormatedDate(string, format) {
 			return moment(string).format(format)
+		},
+
+		loadSearchResults() {
+			if (this.search.length < 3) {
+				this.searchFileList = []
+				return
+			}
+			if (this.searchTimeout) {
+				clearTimeout(this.searchTimeout)
+			}
+			this.searchTimeout = setTimeout(async () => {
+				const searchQueries = this.search.split(' ')
+
+				const tags = Object.values(this.tags)
+				const searchMatchingTags = searchQueries.map(query =>
+					tags.filter(tag => tag.displayName.includes(query)).map(tag => tag.id))
+				const uniqueTags = uniq(flatten(searchMatchingTags))
+				await Promise.all(uniqueTags.map(tagId =>
+					this.fetchTaggedImages(tagId)
+				))
+				const fileIdToTags = {}
+				this.searchFileList = uniq(flatten(
+					uniqueTags
+						.map(tagId => this.tags[tagId])
+						.filter(tag => tag.files)
+						.map(tag => tag.files.map(id => {
+							if (fileIdToTags[id]) {
+								fileIdToTags[id].push(tag.id)
+							} else {
+								fileIdToTags[id] = [tag.id]
+							}
+							return id
+						}))
+				))
+					.filter(fileId =>
+						searchMatchingTags.every(queryTags =>
+							queryTags.some(tagId => fileIdToTags[fileId].includes(tagId))
+						)
+					)
+				// cancel any pending requests
+				if (this.cancelRequest) {
+					this.cancelRequest('Changed view')
+				}
+				this.resetState()
+			}, 250)
+		},
+
+		async fetchTaggedImages(tagId) {
+			// if we don't already have some cached data let's show a loader
+			if (!this.tags[tagId]) {
+				this.$emit('update:loading', true)
+			}
+			this.error = null
+
+			try {
+				// get data
+				const files = await getTaggedImages(tagId)
+				this.$store.dispatch('updateTag', { id: tagId, files })
+			} catch (error) {
+				console.error(error)
+				this.error = true
+			} finally {
+				// done loading
+				this.$emit('update:loading', false)
+			}
 		},
 
 	},

@@ -47,6 +47,7 @@ export default async function(onlyFavorites = false, options = {}) {
 		perPage: sizes.max.count * 10, // ten rows of the max width
 		mimesType: allMimes, // all mimes types
 		onThisDay: false,
+		fileIds: [],
 	}, options)
 
 	const prefixPath = `/files/${getCurrentUser().uid}`
@@ -93,6 +94,12 @@ export default async function(onlyFavorites = false, options = {}) {
 			}).join('\n')}</d:or>`
 		: ''
 
+	const orIds = options.fileIds.length
+		? `<d:or>${options.fileIds.map(fileId =>
+			`<d:eq><d:prop><oc:fileid/></d:prop><d:literal>${fileId}</d:literal></d:eq>`
+		)}</d:or>`
+		: ''
+
 	options = Object.assign({
 		method: 'SEARCH',
 		headers: {
@@ -123,6 +130,7 @@ export default async function(onlyFavorites = false, options = {}) {
 							</d:or>
 							${eqFavorites}
 							${onThisDay}
+							${orIds}
 							<d:eq>
 								<d:prop>
 									<oc:owner-id/>
