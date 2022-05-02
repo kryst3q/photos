@@ -27,6 +27,7 @@ namespace OCA\Photos\Controller;
 
 use OCA\Files_Sharing\SharedStorage;
 use OCA\Photos\AppInfo\Application;
+use OCA\Photos\Service\ExifMetadataExtractor;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
@@ -50,15 +51,19 @@ class AlbumsController extends Controller {
 	/** @var IPreview */
 	private $previewManager;
 
+	private ExifMetadataExtractor $exifMetadataExtractor;
+
 	public function __construct(string $userId,
 								IRequest $request,
 								IRootFolder $rootFolder,
-								IPreview $previewManager) {
+								IPreview $previewManager,
+								ExifMetadataExtractor $exifMetadataExtractor) {
 		parent::__construct(Application::APP_ID, $request);
 
 		$this->userId = $userId;
 		$this->rootFolder = $rootFolder;
 		$this->previewManager = $previewManager;
+		$this->exifMetadataExtractor = $exifMetadataExtractor;
 	}
 
 	/**
@@ -109,7 +114,7 @@ class AlbumsController extends Controller {
 				'etag' => $node->getEtag(),
 				'fileid' => $node->getId(),
 				'filename' => $path,
-				'lastmod' => $node->getMTime(),
+				'lastmod' => $this->exifMetadataExtractor->getOriginalCreationDate($node) ?? $node->getMTime(),
 				'mime' => $node->getMimetype(),
 				'size' => $node->getSize(),
 				'type' => $node->getType(),
